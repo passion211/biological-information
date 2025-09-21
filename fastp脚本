@@ -1,0 +1,79 @@
+#!/bin/bash
+
+# 设置目录路径
+input_dir="./raw_data"    # 原始数据存放目录
+output_dir="./fastp_out"  # 处理后的数据输出目录
+report_dir="./fastp_reports" # 报告文件输出目录
+
+# 创建输出目录
+mkdir -p "$output_dir"
+mkdir -p "$report_dir"
+
+# 获取总样本数
+total_samples=$(find "$input_dir" -name "*_1P.fq.gz" | wc -l)
+current_sample=0
+
+# 创建一个函数，用于处理单个样本
+process_sample() {
+    # 获取函数参数
+    r1_file=$1         # 第一个参数：Read1文件路径
+    output_dir=$2      # 第二个参数：输出目录
+    report_dir=$3      # 第三个参数：报告目录
+    
+    # 提取样本名（根据你的文件名调整）
+    base_name=$(basename "$r1_file")  # 获取文件名（不含路径）
+    sample_name="${base_name%_1P.fq.gz}" # 从文件名中移除"_1P.fq.gz"后缀，得到样本名
+    
+    # 推导R2文件名（将_1P替换为_2P）
+    r2_file="${r1_file/_1P.fq.gz/_2P.fq.gz}"
+
+    # 更新进度
+    current_sample=$((current_sample + 1))
+    progress=$((100 * current_sample / total_samples))
+    echo -ne "处理进度: [$progress%] 正在处理: $sample_name ($current_sample/$total_samples)\r"
+    
+    # 使用fastp处理数据
+    fastp \
+        -i "$r1_file" -I "$r2_file" \  # 输入文件
+        -o "$output_dir/${sample_name}_1P.clean.fq.gz" -O "$output_dir/${sample_name}_2P.clean.fq.gz" \ # 输出文件
+        -j "$report_dir/${sample_name}.fastp.json" -h "$report_dir/${sample_name}.fastp.html" \ # 报告文件
+        -w 4 \  # 使用4个线程
+        -c \    # 对双端读段的重叠区域进行校正
+        --detect_adapter_for_pe \  # 为双端数据启用接头自动检测
+        -q 20 \ # 质量阈值，低于Q20的碱基被视为低质量
+        -l 50   # 丢弃修剪后长度小于50bp的reads
+        
+    # 检查fastp是否成功执行
+    if [ $? -eq 0 ]; then
+        echo "完成处理: $sample_name" >> "$report_dir/processing.log"
+    else
+        echo "处理失败: $sample_name" >> "$report_dir/error.log"
+    fi
+}
+
+# 显示欢迎信息和基本设置
+echo "=== 双端测序数据质控处理脚本 ==="
+echo "输入目录: $input_dir"
+echo "输出目录: $output_dir"
+echo "报告目录: $report_dir"
+echo "找到 $total_samples 个样本待处理"
+echo "================================="
+
+# 记录开始时间
+start_time=$(date +%s)
+
+# 使用for循环处理数据
+for r1_file in "$input_dir"/*_1P.fq.gz; do
+    process_sample "$r1_file" "$output_dir" "$report_dir"
+done
+
+# 计算并显示总处理时间
+end_time=$(date +%s)
+total_time=$((end_time - start_time))
+
+echo ""
+echo "================================="
+echo "所有样本处理完成!"
+echo "总耗时: $((total_time / 60))分$((total_time % 60))秒"
+echo "报告文件保存在: $report_dir"
+echo "处理结果保存在: $output_dir"

@@ -1,0 +1,12 @@
+fastp \
+       -i in_1.fq.gz -I in_2.fq.gz \
+       -o out_1.fq.gz -O out_2.fq.gz \
+       -5 -W 4 -M 20 \ # 5'端修剪
+       -l 36 \ # 丢弃修剪后长度小于36bp的reads
+       -q 20 \ # 质量阈值，低于Q20的碱基视为低质量
+       -u 40 \ # 允许每条read中低质量碱基的最大百分比（默认40%）
+       -c \ # 对双端重叠区域进行碱基校正（PE数据）
+       --detect_adapter_for_pe \ # 自动检测并修剪接头（PE数据默认启用）
+       -w 8 \ # 使用线程数，加速处理
+       -h ./fastp_reports/report.html \ # 指定报告输出路径
+       -j ./fastp_reports/report.json
